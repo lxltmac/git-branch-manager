@@ -4,7 +4,7 @@ spring:
       - classpath:/application-git.yml
 server:
   port: 8090
-work-home: C:\代码批量管理
+work-home: /Users/lxltmac/Desktop/GitDemoSpace/代码批量管理
 git-save-location: /Users/lxltmac/Desktop/GitSpace/git-branch-manager/src/main/resources/application-git.yml
 logging:
   file:
