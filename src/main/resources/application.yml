@@ -4,7 +4,7 @@ spring:
       - classpath:/application-git.yml
 server:
   port: 8090
-work-home: /root/git-branch-manager/gitPullSpace/代码批量管理
+work-home: /root/git-branch-manager/gitPullSpace
 git-save-location: /root/git-branch-manager/src/main/resources/application-git.yml
 logging:
   file:
