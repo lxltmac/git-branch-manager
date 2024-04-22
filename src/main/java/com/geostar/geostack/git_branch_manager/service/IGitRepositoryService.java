@@ -122,6 +122,17 @@ public interface IGitRepositoryService {
      */
     boolean mergeBranch(GitProject gitProject, String currWorkBranch, String sourceBranch, String message) throws IOException, GitAPIException;
 
+
+    /**
+     * 合并分支，将被合并分支的修改并入当前工作分支
+     *
+     * @param gitProject
+     * @param currWorkBranch 当前工作分支
+     * @param sourceBranch   被合并的分支
+     * @return
+     */
+    boolean mergeBranchReq(GitProject gitProject, String currWorkBranch, String sourceBranch, String message, String content) throws IOException;
+
     /**
      * 获取日志
      *

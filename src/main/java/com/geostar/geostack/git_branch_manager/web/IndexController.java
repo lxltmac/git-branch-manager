@@ -1,6 +1,7 @@
 package com.geostar.geostack.git_branch_manager.web;
 
 import com.geostar.geostack.git_branch_manager.common.Page;
+import com.geostar.geostack.git_branch_manager.common.YamlWriter;
 import com.geostar.geostack.git_branch_manager.config.GitRepositoryConfig;
 import com.geostar.geostack.git_branch_manager.pojo.GitLog;
 import com.geostar.geostack.git_branch_manager.pojo.GitProject;
@@ -18,6 +19,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,6 +35,8 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Controller
 @RequestMapping("/")
@@ -50,6 +55,8 @@ public class IndexController {
     private IGitRepositoryService gitRepositoryService;
     @Autowired
     private GitRepositoryConfig gitRepositoryConfig;
+    @Autowired
+    private YamlWriter yamlWriter;
 
     /**
      * 首页展示
@@ -71,13 +78,18 @@ public class IndexController {
     @RequestMapping("/list")
     public String list(Model model) {
         List<GitProject> projects = gitRepositoryService.getAllGitProject();
+        if(CollectionUtils.isEmpty(projects)){
+            return "list";
+        }
         for (GitProject gitProject : projects) {
             try {
                 gitRepositoryService.updateGitProjectInfo(gitProject);
             } catch (IOException e) {
-                e.printStackTrace();
+//                e.printStackTrace();
+                logger.error("更新git项目信息失败", e);
             } catch (GitAPIException e) {
-                e.printStackTrace();
+//                e.printStackTrace();
+                logger.error("更新git项目信息失败", e);
             }
         }
         modelBuild(model, projects);
@@ -93,17 +105,38 @@ public class IndexController {
         return "list";
     }
 
+    @PostMapping("/setGitProject")
+    public String setGitProject(Model model, String gitProject) throws Exception {
+        List<String> projectUrls = Arrays.asList(gitProject.split(";"));
+        gitRepositoryConfig.setGitProjects(projectUrls, yamlWriter);
+        List<GitProject> projects = gitRepositoryService.getAllGitProject();
+        modelBuild(model, projects);
+        return "list";
+    }
+
     /**
      * 克隆或者拉取最新代码
      *
      * @param model
      * @return
      */
-    @RequestMapping({"cloneOrPull"})
-    public String cloneOrPull(Model model) {
+    @RequestMapping({"cloneOrPull/{pullBranch}/{project}"})
+    public String cloneOrPull(Model model, @PathVariable(value = "pullBranch") String pullBranch,
+                @PathVariable(value = "project") String project) {
+        try {
+            pullBranch = URLDecoder.decode(pullBranch, "UTF-8");
+            project = URLDecoder.decode(project, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
         List<GitProject> projects = gitRepositoryService.getAllGitProject();
+        if(!"all".equals(project)){
+            List<String> mergeProjects = Arrays.stream(project.split(",")).map(String::trim).collect(Collectors.toList());
+            projects = projects.stream().filter(p -> mergeProjects.contains(p.getName())).collect(Collectors.toList());
+        }
         for (GitProject gitProject : projects) {
             try {
+                gitRepositoryService.switchBranch(gitProject, pullBranch);
                 gitRepositoryService.cloneOrPull(gitProject);
                 gitRepositoryService.updateGitProjectInfo(gitProject);
             } catch (IOException e) {
@@ -160,6 +193,41 @@ public class IndexController {
             e.printStackTrace();
         }
         List<GitProject> projects = gitRepositoryService.getAllGitProject();
+        for (GitProject gitProject : projects) {
+            try {
+                gitRepositoryService.switchBranch(gitProject, branchName);
+                gitRepositoryService.updateGitProjectInfo(gitProject);
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (GitAPIException e) {
+                e.printStackTrace();
+            }
+        }
+        modelBuild(model, projects);
+        return INDEX_HTML;
+    }
+
+    /**
+     * 切换分支
+     *
+     * @param model
+     * @return
+     */
+    @RequestMapping({"/switchBranchByProject/{branchName}/{project}"})
+    public String switchBranchByProject(Model model,
+                               @PathVariable(value = "branchName") String branchName,
+                               @PathVariable(value = "project") String project) {
+        try {
+            branchName = URLDecoder.decode(branchName, "UTF-8");
+            project = URLDecoder.decode(project, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+        List<GitProject> projects = gitRepositoryService.getAllGitProject();
+        if(!"all".equals(project)){
+            List<String> mergeProjects = Arrays.stream(project.split(",")).map(String::trim).collect(Collectors.toList());
+            projects = projects.stream().filter(p -> mergeProjects.contains(p.getName())).collect(Collectors.toList());
+        }
         for (GitProject gitProject : projects) {
             try {
                 gitRepositoryService.switchBranch(gitProject, branchName);
@@ -409,6 +477,46 @@ public class IndexController {
         return INDEX_HTML;
     }
 
+
+    /**
+     * 创建合并请求，将被合并分支的修改并入当前工作分支
+     *
+     * @param model
+     * @param currWorkBranch 当前工作分支
+     * @param sourceBranch   被合并分支
+     * @return
+     */
+    @RequestMapping({"/mergeBranchReq/{currWorkBranch}/{sourceBranch}/{message}/{content}/{project}"})
+    public String mergeBranchReq(Model model, @PathVariable(value = "currWorkBranch") String currWorkBranch,
+                              @PathVariable(value = "sourceBranch") String sourceBranch,
+                              @PathVariable(value = "message") String message,
+                              @PathVariable(value = "content") String content,
+                              @PathVariable(value = "project") String project) {
+        try {
+            currWorkBranch = URLDecoder.decode(currWorkBranch, "UTF-8");
+            sourceBranch = URLDecoder.decode(sourceBranch, "UTF-8");
+            message = URLDecoder.decode(message, "UTF-8");
+            content = URLDecoder.decode(content, "UTF-8");
+            project = URLDecoder.decode(project, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+        List<GitProject> projects = gitRepositoryService.getAllGitProject();
+        if(!"all".equals(project)){
+            List<String> mergeProjects = Arrays.stream(project.split(",")).map(String::trim).collect(Collectors.toList());
+            projects = projects.stream().filter(p -> mergeProjects.contains(p.getName())).collect(Collectors.toList());
+        }
+        for (GitProject gitProject : projects) {
+            try {
+                gitRepositoryService.mergeBranchReq(gitProject, currWorkBranch, sourceBranch, message, content);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        modelBuild(model, projects);
+        return INDEX_HTML;
+    }
+
     /**
      * 分页获取Git日志
      *
@@ -448,10 +556,14 @@ public class IndexController {
      * @param objects
      */
     private void modelBuild(Model model, List<GitProject> projects, Object... objects) {
+        Map<String, GitProject> gitProjectMap = projects.stream().collect(Collectors.toMap(GitProject::getName, Function.identity()));
         /**
          * 添加项目集合属性
          */
         model.addAttribute("projects", projects);
+        model.addAttribute("gitProjectMap", gitProjectMap);
+        List<String> projectNames = projects.stream().map(GitProject::getName).collect(Collectors.toList());
+        model.addAttribute("projectNames", projectNames);
         /**
          * 添加分支属性
          */

@@ -1,9 +1,11 @@
 package com.geostar.geostack.git_branch_manager.config;
 
+import com.geostar.geostack.git_branch_manager.common.YamlWriter;
 import com.geostar.geostack.git_branch_manager.pojo.GitProject;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,6 +41,21 @@ public class GitRepositoryConfig {
 
     public List<GitProject> getProjects() {
         return gitProjects;
+    }
+
+    public void setGitProjects(List<String> projects, YamlWriter yamlWriter) throws Exception {
+        for (String project : projects) {
+            setGitProjects(project);
+            yamlWriter.modifyGitProjectConfig(project);
+        }
+    }
+
+    public void setGitProjects(String project) {
+        GitProject gitProject = new GitProject();
+        String projectName = project.substring(project.lastIndexOf("/") + 1, project.length() - ".git".length());
+        gitProject.setName(projectName);
+        gitProject.setRemoteUrl(project);
+        gitProjects.add(gitProject);
     }
 
     public void setProjects(List<String> projects) {

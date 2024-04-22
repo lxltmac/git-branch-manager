@@ -8,40 +8,62 @@
     <link th:href="@{/bootstrap-3.3.7/css/bootstrap.css}" rel="stylesheet"/>
     <script type="text/javascript" th:src="@{/bootstrap-3.3.7/js/bootstrap.js}"></script>
     <link th:href="@{/css/default.css}" rel="stylesheet"/>
+    <link th:href="@{/css/select2min.css}" rel="stylesheet"/>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <title>Git分支管理</title>
     <script>
         if (window.location.pathname != "/") {
             window.location.href = "/";
         }
     </script>
+    <style>
+        .selected-item {
+            display: inline-block;
+            margin-right: 5px;
+            padding: 3px 5px;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            overflow: auto;
+        }
+
+        .delete-btn {
+            cursor: pointer;
+            margin-left: 5px;
+        }
+    </style>
 </head>
 <body>
 <div class="contentDiv">
     <legend>
         <strong><a href="/">仓库列表</a></strong>
     </legend>
-    <label style="font-size: 16px;">当前工作分支：<span th:if="${!#lists.isEmpty(projects)}"
-                                                 th:text="${projects[0].currBranch}">master</span></label>
+<!--    <label style="font-size: 16px;">当前工作分支：<span th:if="${!#lists.isEmpty(projects)}"-->
+<!--                                                 th:text="${projects[0].currBranch}">master</span></label>-->
     <div>
         <button class="btn btn-primary custom-a" data-toggle="modal" data-target="#accountModal">账号密码
         </button>
-        <button class="btn btn-primary custom-a" onclick="pullAll();" data-toggle="tooltip"
-                title="拉取当前分支最新源代码，第一次直接拉取master分支">拉取代码
+        <button class="btn btn-primary custom-a" data-toggle="modal" data-target="#gitProjectModal">添加新仓库
+        </button>
+        <button class="btn btn-primary custom-a" data-toggle="modal"
+                title="拉取当前分支最新源代码，第一次直接拉取master分支" data-target="#pullAllModal">拉取代码
         </button>
         <button th:if="${!#lists.isEmpty(branchIntersect)}" class="btn btn-primary custom-a" data-toggle="modal"
                 data-target="#createBranchModal">创建分支
         </button>
-        <div th:if="${!#lists.isEmpty(branchIntersect)}" class="btn-group">
-            <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown">切换分支
-                <span class="caret"></span>
-            </button>
-            <ul class="dropdown-menu" role="menu" style="max-height: 168px;overflow: auto;">
-                <li th:each="branch : ${branchIntersect}"><a
-                        th:if="${!#lists.isEmpty(projects) and projects[0].currBranch != branch}" th:text="${branch}"
-                        href="javascript:void(0);"
-                        onclick="checkoutAll(this)"></a></li>
-            </ul>
-        </div>
+        <button class="btn btn-primary custom-a" data-toggle="modal" data-target="#checkoutAllModal">切换分支
+        </button>
+<!--        <div th:if="${!#lists.isEmpty(branchIntersect)}" class="btn-group">-->
+<!--            <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown">切换分支-->
+<!--                <span class="caret"></span>-->
+<!--            </button>-->
+<!--            <ul class="dropdown-menu" role="menu" style="max-height: 168px;overflow: auto;">-->
+<!--                <li th:each="branch : ${branchIntersect}"><a-->
+<!--                        th:if="${!#lists.isEmpty(projects) and projects[0].currBranch != branch}" th:text="${branch}"-->
+<!--                        href="javascript:void(0);"-->
+<!--                        onclick="checkoutAll(this)"></a></li>-->
+<!--            </ul>-->
+<!--        </div>-->
         <button th:if="${!#lists.isEmpty(branchIntersect) and !#lists.isEmpty(projects)}"
                 class="btn btn-primary custom-a" data-toggle="modal"
                 data-target="#createTagModal">创建标签
@@ -52,6 +74,9 @@
         </button>
         <button class="btn btn-primary custom-a" data-toggle="modal" data-target="#mergeBranchModal">
             合并分支
+        </button>
+        <button class="btn btn-primary custom-a" data-toggle="modal" data-target="#mergeBranchReqModal">
+            创建合并请求
         </button>
         <button th:if="${!#lists.isEmpty(branchIntersect) and !#lists.isEmpty(projects) and projects[0].currBranch ne 'master' and projects[0].currBranch ne 'develop'}"
                 class="btn btn-danger custom-a" data-toggle="modal" data-target="#deleteBranchModal"
@@ -71,6 +96,7 @@
             <col style="width: 200px">
             <col style="width: 90px">
             <col style="width: 100px">
+            <col style="width: 100px">
             <col style="width: 150px">
             <col>
             <col style="width: 60px">
@@ -79,6 +105,7 @@
         <th class="header">仓库名称</th>
         <th class="header">文件状态</th>
         <th class="header">最后提交人</th>
+        <th class="header">当前分支</th>
         <th class="header">提交时间</th>
         <th class="header">提交日志</th>
         <th class="header">操作</th>
@@ -100,6 +127,7 @@
                         th:text="${#sets.size(project.conflictingSet)}"></span>]</span>
             </td>
             <td th:text="${project.lastCommitUser}"></td>
+            <td th:text="${project.currBranch}"></td>
             <td th:text="${#dates.format(project.lastCommitDate,  'yyyy-MM-dd HH:mm:dd')}"></td>
             <td th:text="${project.lastCommitMessage}"></td>
             <td>
@@ -145,10 +173,34 @@
     }
 
     /**
+     * 保存新仓库地址
+     */
+    function saveGitProject(){
+        var data = {
+            gitProject: $("#gitProject").val(),
+        }
+
+        $.ajax({
+            type: "post",
+            url: "/setGitProject",
+            data: data
+        })
+        window.location.reload();
+    }
+
+    /**
      * 拉取代码
      */
     function pullAll() {
-        window.location.href = "/cloneOrPull";
+        var pullBranch = $("#selectPullBranch").val();
+        var project = $("#selectedPullProjects").val();
+        if(project == "" || null ==  project){
+            project = "all";
+        }
+        if(pullBranch == "" || null ==  pullBranch){
+            pullBranch = "tencent-prod";
+        }
+        window.location.href = "/cloneOrPull/" + doubleEncodeText(pullBranch) + "/" + doubleEncodeText(project);
     }
 
     /**
@@ -175,6 +227,24 @@
         if (branchName != "") {
             window.location.href = "/switchBranch/" + doubleEncodeText(branchName);
         }
+    }
+
+    function checkoutBranch() {
+        var branchName = $("#selectCheckoutBranch").val();
+        var project = $("#selectedCheckoutProjects").val();
+        if(project == "" || null ==  project){
+            project = "all";
+        }
+        if(branchName == "" || null ==  branchName){
+            project = "tencent-prod";
+        }
+        // 关闭模态窗口
+        // 为模态框绑定 hidden.bs.modal 事件
+        $('#checkoutAllModal').on('hidden.bs.modal', function () {
+            window.location.href = "/switchBranchByProject/" + doubleEncodeText(branchName) + "/" + doubleEncodeText(project);
+            // 在模态框关闭成功后，这里执行告警弹出
+            alert('切换分支成功');
+        });
     }
 
     /**
@@ -235,6 +305,27 @@
     }
 
     /**
+     * 合并分支请求
+     */
+    function mergeBranchReq() {
+        var currentBranch = $("#mergeCurrentBranchReq").text().trim();
+        var selectBranch = $("#selectBranchReq").val();
+        var message = $("#mergeBranchMessageReq").val();
+        var content = $("#mergeBranchContentReq").val();
+        var project = $("#selectedProjects").val();
+        if(project == "" || null ==  project){
+            project = "all";
+        }
+        // 关闭模态窗口
+        // 为模态框绑定 hidden.bs.modal 事件
+        $('#mergeBranchReqModal').on('hidden.bs.modal', function () {
+            window.location.href = "/mergeBranchReq/" + doubleEncodeText(currentBranch) + "/" + doubleEncodeText(selectBranch) + "/" + doubleEncodeText(message) + "/" + doubleEncodeText(content) + "/" + doubleEncodeText(project);
+            // 在模态框关闭成功后，这里执行告警弹出
+            alert('创建合并分支请求成功');
+        });
+    }
+
+    /**
      * 打开操作模态框
      */
     function openOperateModal(obj) {
@@ -261,6 +352,256 @@
         } else {
             $("#createBranchToTagNameP").hide();
         }
+    });
+
+
+    // 定义全局变量 textInputElement
+    var textInputElement;
+    var selectedOptions = [];
+
+    var pullTextInputElement;
+    var selectedPullOptions = [];
+
+    var checkoutTextInputElement;
+    var selectedCheckoutOptions = [];
+
+    // 等待页面完全加载后执行
+    window.onload = function() {
+        // 获取 select 元素
+        var selectElement = document.getElementById('selectProjectReq');
+        textInputElement = document.getElementById('selectedProjects');
+
+        // 监听 select 元素的 change 事件
+        selectElement.addEventListener('change', function() {
+            // 获取当前选中的所有选项
+            var selected = Array.from(selectElement.selectedOptions);
+            if(selectedOptions.length > 0){
+               selectedOptions = Array.from(textInputElement.value.split(', '));
+            }
+            console.log(selected);
+            // 将新选择的选项添加到选项列表中
+            console.log("新选择的选项添加到选项列表中前:"+ selectedOptions);
+            console.log("新选择的选项添加到选项列表前长度:"+ selected.length);
+
+            selected.forEach(function(option) {
+                 console.log("新选择的选项:"+option.value);
+                if (selectedOptions.indexOf(option.value) === -1) {
+                    selectedOptions.push(option.value);
+                }
+            });
+
+            // 更新文本框内容
+            textInputElement.value = selectedOptions.join(', ');
+            console.log("更新文本框内容:"+ textInputElement.value);
+
+            // 渲染选中的选项
+            renderSelectedItems(selectedOptions);
+        });
+
+        // 获取拉取分支select 元素
+        var selectPullElement = document.getElementById('selectPullProject');
+        pullTextInputElement = document.getElementById('selectedPullProjects');
+
+        // 监听 select 元素的 change 事件
+        selectPullElement.addEventListener('change', function() {
+            // 获取当前选中的所有选项
+            var pullSelected = Array.from(selectPullElement.selectedOptions);
+            if(selectedPullOptions.length > 0){
+               selectedPullOptions = Array.from(pullTextInputElement.value.split(', '));
+            }
+
+            pullSelected.forEach(function(option) {
+                 console.log("新选择的选项:"+option.value);
+                if (selectedPullOptions.indexOf(option.value) === -1) {
+                    selectedPullOptions.push(option.value);
+                }
+            });
+
+            // 更新文本框内容
+            pullTextInputElement.value = selectedPullOptions.join(', ');
+
+            // 渲染选中的选项
+            renderSelectedPullItems(selectedPullOptions);
+        });
+
+        // 获取切换分支select 元素
+        var selectCheckElement = document.getElementById('selectCheckoutProject');
+        checkoutTextInputElement = document.getElementById('selectedCheckoutProjects');
+
+        // 监听 select 元素的 change 事件
+        selectCheckElement.addEventListener('change', function() {
+            // 获取当前选中的所有选项
+            var selectedCheckout = Array.from(selectCheckElement.selectedOptions);
+            if(selectedCheckoutOptions.length > 0){
+               selectedCheckoutOptions = Array.from(checkoutTextInputElement.value.split(', '));
+            }
+
+            selectedCheckout.forEach(function(option) {
+                 console.log("新选择的选项:"+option.value);
+                if (selectedCheckoutOptions.indexOf(option.value) === -1) {
+                    selectedCheckoutOptions.push(option.value);
+                }
+            });
+
+            // 更新文本框内容
+            checkoutTextInputElement.value = selectedCheckoutOptions.join(', ');
+
+            // 渲染选中的选项
+            renderSelectedCheckoutItems(selectedCheckoutOptions);
+        });
+    };
+
+    // 渲染选中的选项
+    function renderSelectedItems(selectedOptions) {
+        // 获取选项容器元素
+        var selectedItemsContainer = document.getElementById('selectedProjects');
+        console.log("获取选项容器元素:"+ selectedItemsContainer);
+        console.log("selectedOptions元素:"+ selectedOptions);
+
+        // 清空选项容器
+        selectedItemsContainer.innerHTML = '';
+
+        // 遍历选中的选项，为每个选项创建一个显示框，并添加删除按钮
+        selectedOptions.forEach(function(option) {
+            var itemDiv = document.createElement('div');
+            itemDiv.className = 'selected-item';
+            itemDiv.textContent = option;
+            itemDiv.style.wordWrap = 'break-word'; // 添加自动换行样式
+
+            // 创建删除按钮
+            var deleteBtn = document.createElement('span');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.textContent = '×';
+            deleteBtn.onclick = function() {
+                // 在点击删除按钮时移除相应的选项，并重新渲染选中的选项
+                selectedOptions = selectedOptions.filter(function(item) {
+                    return item !== option;
+                });
+                textInputElement.value = selectedOptions.join(', '); // 更新文本框内容
+                console.log("在点击删除按钮时移除相应的选项，并重新渲染选中的选项:"+ selectedOptions);
+                renderSelectedItems(selectedOptions);
+            };
+
+            // 将删除按钮添加到选项显示框中
+            itemDiv.appendChild(deleteBtn);
+
+            // 将选项显示框添加到选项容器中
+            selectedItemsContainer.appendChild(itemDiv);
+        });
+    }
+
+    function cancelRefresh() {
+        // 重新加载页面
+        window.location.reload();
+    }
+
+    // 渲染选中的选项
+    function renderSelectedPullItems(selectedPullOptions) {
+        // 获取选项容器元素
+        var selectedPullItemsContainer = document.getElementById('selectedPullProjects');
+
+        // 清空选项容器
+        selectedPullItemsContainer.innerHTML = '';
+
+        // 遍历选中的选项，为每个选项创建一个显示框，并添加删除按钮
+        selectedPullOptions.forEach(function(option) {
+            var itemPullDiv = document.createElement('div');
+            itemPullDiv.className = 'selected-item';
+            itemPullDiv.textContent = option;
+            itemPullDiv.style.wordWrap = 'break-word'; // 添加自动换行样式
+
+            // 创建删除按钮
+            var deletePullBtn = document.createElement('span');
+            deletePullBtn.className = 'delete-btn';
+            deletePullBtn.textContent = '×';
+            deletePullBtn.onclick = function() {
+                // 在点击删除按钮时移除相应的选项，并重新渲染选中的选项
+                selectedPullOptions = selectedPullOptions.filter(function(item) {
+                    return item !== option;
+                });
+                pullTextInputElement.value = selectedPullOptions.join(', '); // 更新文本框内容
+                console.log("在点击删除按钮时移除相应的选项，并重新渲染选中的选项:"+ selectedPullOptions);
+                renderSelectedPullItems(selectedPullOptions);
+            };
+
+            // 将删除按钮添加到选项显示框中
+            itemPullDiv.appendChild(deletePullBtn);
+
+            // 将选项显示框添加到选项容器中
+            selectedPullItemsContainer.appendChild(itemPullDiv);
+        });
+    }
+
+    // 渲染选中的选项
+    function renderSelectedCheckoutItems(selectedCheckoutOptions) {
+        // 获取选项容器元素
+        var selectedCheckoutItemsContainer = document.getElementById('selectedCheckoutProjects');
+
+        // 清空选项容器
+        selectedCheckoutItemsContainer.innerHTML = '';
+
+        // 遍历选中的选项，为每个选项创建一个显示框，并添加删除按钮
+        selectedCheckoutOptions.forEach(function(option) {
+            var itemDiv = document.createElement('div');
+            itemDiv.className = 'selected-item';
+            itemDiv.textContent = option;
+            itemDiv.style.wordWrap = 'break-word'; // 添加自动换行样式
+
+            // 创建删除按钮
+            var deleteBtn = document.createElement('span');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.textContent = '×';
+            deleteBtn.onclick = function() {
+                // 在点击删除按钮时移除相应的选项，并重新渲染选中的选项
+                selectedCheckoutOptions = selectedCheckoutOptions.filter(function(item) {
+                    return item !== option;
+                });
+                checkoutTextInputElement.value = selectedCheckoutOptions.join(', '); // 更新文本框内容
+                console.log("在点击删除按钮时移除相应的选项，并重新渲染选中的选项:"+ selectedCheckoutOptions);
+                renderSelectedCheckoutItems(selectedCheckoutOptions);
+            };
+
+            // 将删除按钮添加到选项显示框中
+            itemDiv.appendChild(deleteBtn);
+
+            // 将选项显示框添加到选项容器中
+            selectedCheckoutItemsContainer.appendChild(itemDiv);
+        });
+    }
+
+    $(document).ready(function () {
+        $('#selectPullBranch').select2({
+            placeholder: "- 请选择 -",
+            allowClear: true,
+            width: '100%'
+        });
+    });
+
+    $(document).ready(function () {
+        $('#selectCheckoutBranch').select2({
+            placeholder: "- 请选择 -",
+            allowClear: true,
+            width: '100%'
+        });
+    });
+
+    $(document).ready(function () {
+        $('#selectBranchReq').select2({
+            placeholder: "- 请选择 -",
+            allowClear: true,
+            width: '100%'
+        });
+    });
+
+    $(document).ready(function () {
+        $('#mergeCurrentBranchReq').select2({
+            placeholder: "- 请选择 -",
+            allowClear: true,
+            width: '100%'
+        });
+        const defaultBranch = $('#defaultMergeCurrentBranchReq').val();
+        console.log("默认分支："+ defaultBranch);
+        $('#mergeCurrentBranchReq').val(defaultBranch).trigger('change');
     });
 
 </script>
@@ -300,6 +641,130 @@
         </div>
     </div>
 </div>
+<!-- 设置新仓库面板 -->
+<div class="modal fade" id="gitProjectModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">
+                    &times;
+                </button>
+                <h4 class="modal-title">
+                    添加新仓库地址,多个仓库地址用分号(;)拼接,如 1xxx.git;2xxx.git
+                </h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    <strong>添加的新仓库地址：</strong>
+                </p>
+                <p>
+                    <input type="text" class="form-control" id="gitProject" placeholder="添加的新仓库地址,多个新仓库地址用;拼接"/>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal" onclick="cancelRefresh();">
+                    取消
+                </button>
+                <button type="button" class="btn btn-primary" data-dismiss="modal" onclick="saveGitProject();">
+                    确定
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- 拉取代码模态框（Modal） -->
+<div class="modal fade" id="pullAllModal" role="dialog" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">
+                    &times;
+                </button>
+                <h4 class="modal-title">
+                    拉取代码
+                </h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    <strong>拉取要更新的代码到本地</strong>
+                </p>
+                <p>项目：
+                    <select class="form-control" id="selectPullProject" style="width:auto;display: inline;">
+                        <option value="">- 请选择(不选择默认全部) -</option>
+                        <option th:each="project : ${projectNames}" th:value="${project}" th:text="${project}"></option>
+                    </select>
+                </p>
+                <p>
+                <div id="selectedPullProjects" class="form-control" style="min-height: 50px;overflow: auto; height:auto;white-space: pre-wrap;" placeholder="请选择项目">请选择项目</div>
+                </p>
+                <p>
+                    要拉取的分支：<select class="form-control" id="selectPullBranch" style="width:auto;display: inline;">
+                    <option value=""> - 请选择 -</option>
+                    <option th:each="branch : ${branchIntersect}" th:value="${branch}" th:text="${branch}">
+<!--                            th:if="${branch != projects[0].currBranch and !(projects[0].currBranch == 'develop' && branch == 'master')-->
+<!--                                and !(projects[0].currBranch != 'master' && projects[0].currBranch != 'develop' && (branch == 'master' || branch == 'develop'))}"-->
+                    </option>
+                    </select>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal" onclick="cancelRefresh();">
+                    取消
+                </button>
+                <button type="button" class="btn btn-primary" data-dismiss="modal" onclick="pullAll();">
+                    确定
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- 切换分支模态框（Modal） -->
+<div class="modal fade" id="checkoutAllModal" role="dialog" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">
+                    &times;
+                </button>
+                <h4 class="modal-title">
+                    切换分支
+                </h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    <strong>切换分支代码到本地</strong>
+                </p>
+                <p>项目：
+                    <select class="form-control" id="selectCheckoutProject" style="width:auto;display: inline;">
+                        <option value="">- 请选择(不选择默认全部) -</option>
+                        <option th:each="project : ${projectNames}" th:value="${project}" th:text="${project}"></option>
+                    </select>
+                </p>
+                <p>
+                <div id="selectedCheckoutProjects" class="form-control" style="min-height: 50px;overflow: auto; height:auto;white-space: pre-wrap;" placeholder="请选择项目">请选择项目</div>
+                </p>
+                <p>
+                    要切换的分支：<select class="form-control" id="selectCheckoutBranch" style="width:auto;display: inline;">
+                    <option value=""> - 请选择 -</option>
+                    <option th:each="branch : ${branchIntersect}" th:value="${branch}" th:text="${branch}">
+                        <!--                            th:if="${branch != projects[0].currBranch and !(projects[0].currBranch == 'develop' && branch == 'master')-->
+                        <!--                                and !(projects[0].currBranch != 'master' && projects[0].currBranch != 'develop' && (branch == 'master' || branch == 'develop'))}"-->
+                    </option>
+                </select>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal" onclick="cancelRefresh();">
+                    取消
+                </button>
+                <button type="button" class="btn btn-primary" data-dismiss="modal" onclick="checkoutBranch();">
+                    确定
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 操作模态框（Modal） -->
 <div class="modal fade" id="operateModal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog">
@@ -372,6 +837,74 @@
                     取消
                 </button>
                 <button type="button" class="btn btn-primary" data-dismiss="modal" onclick="mergeBranch();">
+                    确定
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- 创建合并请求模态框（Modal） -->
+<div class="modal fade" id="mergeBranchReqModal" role="dialog" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">
+                    &times;
+                </button>
+                <h4 class="modal-title">
+                    创建合并请求
+                </h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    <strong>合并前请拉取最新代码并提交本地所有修改。</strong>
+                </p>
+                <p>项目：
+                    <select class="form-control" id="selectProjectReq" style="width:auto;display: inline;">
+                        <option value="">- 请选择(不选择默认全部) -</option>
+                        <option th:each="project : ${projectNames}" th:value="${project}" th:text="${project}"></option>
+                    </select>
+                </p>
+                <p>
+                    <div id="selectedProjects" class="form-control" style="min-height: 50px;overflow: auto; height:auto;white-space: pre-wrap;" placeholder="请选择项目">请选择项目</div>
+                </p>
+                <p>
+<!--                    当前工作分支：<strong id="mergeCurrentBranchReq"-->
+<!--                                         th:text="${'&nbsp;' + projects[0].currBranch + '&nbsp;'}"></strong>-->
+                    <input type="hidden" id="defaultMergeCurrentBranchReq" th:value="${projects[0].currBranch}" />
+                    当前需要合并的工作分支：<select class="form-control" id="mergeCurrentBranchReq" style="width:auto;display: inline;">
+                    <option value=""> - 请选择 -</option>
+                    <option th:each="branch : ${branchIntersect}" th:value="${branch}" th:text="${branch}">
+                    </option>
+                </select>
+                </p>
+                <p>
+
+                    <!--
+                     合并分支时分支下拉框的控制规则：
+                     1、当前工作分支不能和当前工作分支合并，这没有意义
+                     2、当前工作分支为develop时，master分支不允许被其合并
+                     3、当前工作分支不为master和develop时master分支和develop分支不允许被其合并
+                     -->
+                    待合并的分支：<select class="form-control" id="selectBranchReq" style="width:auto;display: inline;">
+                    <option value=""> - 请选择 -</option>
+                    <option th:each="branch : ${branchIntersect}" th:value="${branch}" th:text="${branch}"
+                            th:if="${branch != projects[0].currBranch and !(projects[0].currBranch == 'develop' && branch == 'master')
+                                and !(projects[0].currBranch != 'master' && projects[0].currBranch != 'develop' && (branch == 'master' || branch == 'develop'))}"></option>
+                </select>
+                </p>
+                <p>
+                    描述信息：<textarea id="mergeBranchContentReq" class="form-control"></textarea>
+                </p>
+                <p>
+                    合并日志：<textarea id="mergeBranchMessageReq" class="form-control"></textarea>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal" onclick="cancelRefresh();">
+                    取消
+                </button>
+                <button type="button" class="btn btn-primary" data-dismiss="modal" onclick="mergeBranchReq();">
                     确定
                 </button>
             </div>

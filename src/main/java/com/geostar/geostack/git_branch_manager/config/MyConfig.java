@@ -11,7 +11,14 @@ public class MyConfig {
     @Value("${server.port:8080}")
     private int port;
 
+    @Value("${git-save-location:/git-branch-manager/src/main/resources/application-git.yml}")
+    private String gitSaveLocation;
+
     public int getPort() {
         return port;
+    }
+
+    public String getGitSaveLocation() {
+        return gitSaveLocation;
     }
 }

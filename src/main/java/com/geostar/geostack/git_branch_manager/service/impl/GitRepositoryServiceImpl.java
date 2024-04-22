@@ -1,8 +1,11 @@
 package com.geostar.geostack.git_branch_manager.service.impl;
 
 import com.geostar.geostack.git_branch_manager.common.BranchTypeEnum;
+import com.geostar.geostack.git_branch_manager.common.JsonUtil;
+import com.geostar.geostack.git_branch_manager.common.OkHttpClientHelper;
 import com.geostar.geostack.git_branch_manager.common.Page;
 import com.geostar.geostack.git_branch_manager.config.GitRepositoryConfig;
+import com.geostar.geostack.git_branch_manager.pojo.CodingMergeReq;
 import com.geostar.geostack.git_branch_manager.pojo.GitLog;
 import com.geostar.geostack.git_branch_manager.pojo.GitProject;
 import com.geostar.geostack.git_branch_manager.service.IGitRepositoryService;
@@ -25,7 +28,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -38,6 +40,8 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
     private static final Logger logger = LoggerFactory.getLogger(GitRepositoryServiceImpl.class);
     @Autowired
     private GitRepositoryConfig gitRepositoryConfig;
+    @Autowired
+    private OkHttpClientHelper clientHelper;
     /**
      * 默认远程主机
      */
@@ -47,7 +51,11 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
      */
     private static final String LOG_SEPARATOR = "---------------------------当前项目处理完毕---------------------------";
 
-    private CredentialsProvider reloadAllowHosts(){
+    private static final String CREATE_GIT_MERGE_REQ = "https://baiguokeji.coding.net/open-api/?action=CreateGitMergeReq";
+
+    private static final String TOKEN = "token 9ba529b981446fe209e7b3202a4a3279a87af250";
+
+     CredentialsProvider reloadAllowHosts(){
         return new UsernamePasswordCredentialsProvider(gitRepositoryConfig.getGitUsername(), gitRepositoryConfig.getGitPassword());
     }
 
@@ -409,7 +417,7 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
         ObjectId mergeBase = repo.resolve(sourceBranch);
         git.merge().
                 include(mergeBase).
-                setCommit(true).
+                setCommit(false).
                 setFastForward(MergeCommand.FastForwardMode.NO_FF).
                 setMessage(message).
                 call();
@@ -418,6 +426,31 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
         logger.info("合并分支完成：{}，工作分支：{}，被合并分支{}", gitProject.getRemoteUrl(), currWorkBranch, sourceBranch);
         logger.info(LOG_SEPARATOR);
         return true;
+    }
+
+    @Override
+    public boolean mergeBranchReq(GitProject gitProject, String currWorkBranch, String sourceBranch, String message, String content) throws IOException {
+        logger.info("创建合并请求开始：{}，工作分支：{}，被合并分支{}", gitProject.getRemoteUrl(), currWorkBranch, sourceBranch);
+        String modulesHome = gitRepositoryConfig.getModulesHome();
+        File file = new File(modulesHome + File.separator + gitProject.getName() + File.separator + ".git");
+        String result = clientHelper.sendPostRequest(
+                CREATE_GIT_MERGE_REQ, builderBody(gitProject, currWorkBranch, sourceBranch, message, content), TOKEN);
+        logger.info("创建合并请求完成，合并结果：{}", result);
+        logger.info("创建合并请求完成：{}，工作分支：{}，被合并分支{}", gitProject.getRemoteUrl(), currWorkBranch, sourceBranch);
+        logger.info(LOG_SEPARATOR);
+        return true;
+    }
+
+    private String builderBody(GitProject gitProject, String currWorkBranch, String sourceBranch, String message, String content){
+        CodingMergeReq req = new CodingMergeReq();
+        req.setContent(content);
+//        req.setDepotId("");
+        req.setDepotPath(gitProject.getRemoteUrl().replace("https://e.coding.net", ""));
+        req.setDestBranch(sourceBranch);
+//        req.setReviewers("EgtknuPCSd,qSoWQyZJfS,uFKDabiekA,DvjWXJhTkS,csKLXfkfOY,afvENvZhgy,yhFlPeAPoA,CvRZkHlFPQ");
+        req.setSrcBranch(currWorkBranch);
+        req.setTitle(message);
+        return JsonUtil.getInstance().toJsonStr(req);
     }
 
     @Override
