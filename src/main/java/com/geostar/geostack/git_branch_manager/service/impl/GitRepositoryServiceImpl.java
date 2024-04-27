@@ -58,14 +58,14 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
     /**
      * 创建合并请求
      */
-    private static final String CREATE_GIT_MERGE_REQ = "https://baiguokeji.coding.net/open-api/?action=CreateGitMergeReq";
+    private static final String CREATE_GIT_MERGE_REQ = "https://xxxxx.coding.net/open-api/?action=CreateGitMergeReq";
 
     /**
      * 查询仓库合并请求列表
      */
-    private static final String DESCRIBE_DEPOT_MERGE_REQ = "https://baiguokeji.coding.net/open-api/?action=DescribeDepotMergeRequests";
+    private static final String DESCRIBE_DEPOT_MERGE_REQ = "https://xxxxx.coding.net/open-api/?action=DescribeDepotMergeRequests";
 
-    private static final String TOKEN = "9ba529b981446fe209e7b3202a4a3279a87af250";
+    private static final String TOKEN = "xxxxxxxxx";
 
      CredentialsProvider reloadAllowHosts(){
         return new UsernamePasswordCredentialsProvider(gitRepositoryConfig.getGitUsername(), gitRepositoryConfig.getGitPassword());
@@ -509,7 +509,6 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
 //        req.setDepotId("");
         req.setDepotPath(gitProject.getRemoteUrl().replace("https://e.coding.net", ""));
         req.setDestBranch(sourceBranch);
-//        req.setReviewers("EgtknuPCSd,qSoWQyZJfS,uFKDabiekA,DvjWXJhTkS,csKLXfkfOY,afvENvZhgy,yhFlPeAPoA,CvRZkHlFPQ");
         req.setSrcBranch(currWorkBranch);
         req.setTitle(message);
         return JsonUtil.getInstance().toJsonStr(req);

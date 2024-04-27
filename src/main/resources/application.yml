@@ -6,13 +6,9 @@ spring:
       - classpath:/application-git.yml
 server:
   port: 8090
-work-home: /Users/lxltmac/Desktop/GitDemoSpace/代码批量管理
-git-save-location: /Users/lxltmac/Desktop/GitSpace/git-branch-manager/src/main/resources/application-git.yml
-#work-home: /root/git-branch-manager/gitPullSpace/gitManager
-#git-save-location: /root/git-branch-manager/src/main/resources/application-git.yml
+work-home: xxxxxx
+git-save-location: /xxxxxx/src/main/resources/application-git.yml
 logging:
   file:
     path: ${work-home}\logs
 modules-home: ${work-home}\modules
-#git-username: 2449382248@qq.com
-#git-password: lxl19920918@
