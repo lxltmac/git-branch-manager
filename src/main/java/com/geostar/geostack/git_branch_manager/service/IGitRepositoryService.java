@@ -3,6 +3,7 @@ package com.geostar.geostack.git_branch_manager.service;
 import com.geostar.geostack.git_branch_manager.common.Page;
 import com.geostar.geostack.git_branch_manager.pojo.GitLog;
 import com.geostar.geostack.git_branch_manager.pojo.GitProject;
+import com.geostar.geostack.git_branch_manager.pojo.coding.CodingMergersInfo;
 import org.eclipse.jgit.api.errors.GitAPIException;
 
 import java.io.IOException;
@@ -104,6 +105,14 @@ public interface IGitRepositoryService {
     String getFileContent(GitProject gitProject, String fileName) throws IOException;
 
     /**
+     * 查询仓库合并请求列表
+     * @param gitProject
+     * @return
+     * @throws IOException
+     */
+    List<CodingMergersInfo> describeDepotMergeRequests(GitProject gitProject) throws IOException;
+
+    /**
      * 删除标签
      *
      * @param gitProject
@@ -122,6 +131,8 @@ public interface IGitRepositoryService {
      */
     boolean mergeBranch(GitProject gitProject, String currWorkBranch, String sourceBranch, String message) throws IOException, GitAPIException;
 
+
+    boolean isLogin(String userName, String password, String gitProjectName);
 
     /**
      * 合并分支，将被合并分支的修改并入当前工作分支

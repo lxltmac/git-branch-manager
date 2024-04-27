@@ -1,10 +1,14 @@
 package com.geostar.geostack.git_branch_manager.web;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import com.geostar.geostack.git_branch_manager.common.Page;
 import com.geostar.geostack.git_branch_manager.common.YamlWriter;
 import com.geostar.geostack.git_branch_manager.config.GitRepositoryConfig;
 import com.geostar.geostack.git_branch_manager.pojo.GitLog;
 import com.geostar.geostack.git_branch_manager.pojo.GitProject;
+import com.geostar.geostack.git_branch_manager.pojo.coding.CodingMergersInfo;
 import com.geostar.geostack.git_branch_manager.service.IGitRepositoryService;
 import org.apache.commons.io.IOUtils;
 import org.dom4j.Document;
@@ -21,10 +25,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -65,8 +66,98 @@ public class IndexController {
      */
     @RequestMapping("/")
     public String index(Model model) {
+        logger.info("index进行首页展示");
         list(model);
         return INDEX_HTML;
+    }
+
+    @RequestMapping("/login")
+    public String login(Model model){
+        return "login";
+    }
+
+    @RequestMapping("/loginSuccess")
+    public String list1(Model model){
+        return "loginSuccess";
+    }
+
+    @RequestMapping("/listMerge")
+    public String listMerge(Model model) {
+        logger.info("进入列表展示");
+        List<GitProject> projects = gitRepositoryService.getAllGitProject();
+        if(CollectionUtils.isEmpty(projects)){
+            return "list";
+        }
+        for (GitProject gitProject : projects) {
+            try {
+                gitRepositoryService.updateGitProjectInfo(gitProject);
+            } catch (IOException e) {
+//                e.printStackTrace();
+                logger.error("更新git项目信息失败", e);
+            } catch (GitAPIException e) {
+//                e.printStackTrace();
+                logger.error("更新git项目信息失败", e);
+            }
+        }
+        modelMergeBuild(model, projects, true);
+        return "listMerge";
+    }
+
+    @RequestMapping("/isLogin")
+    @ResponseBody
+    public String isLogin(Model model, String username, String password, boolean flag) throws IOException, InterruptedException {
+        logger.info("进行登录操作username:{},password:{}", username, password);
+        if ((StringUtils.hasLength(username) && StringUtils.hasLength(password))
+                && flag) {
+            if (!username.equals(gitRepositoryConfig.getGitUsername())
+                    || !password.equals(gitRepositoryConfig.getGitPassword())) {
+                return isLogin(model, username, password, false);
+            } else if (StringUtils.hasLength(gitRepositoryConfig.getGitPassword())
+                    && StringUtils.hasLength(gitRepositoryConfig.getGitUsername())) {
+                return "/list";
+            } else {
+                return "/login";
+            }
+        }
+        if ((!StringUtils.hasLength(username) || !StringUtils.hasLength(password))
+                && StringUtils.hasLength(gitRepositoryConfig.getGitPassword())
+                && StringUtils.hasLength(gitRepositoryConfig.getGitUsername())) {
+            return "/list";
+        }
+        if (!StringUtils.hasLength(username) || !StringUtils.hasLength(password)) {
+            return "/login";
+        }
+        String filePath = Objects.requireNonNull(YamlWriter.class.getResource("/application-git.yml")).getFile();
+        String mainFilePath = Objects.requireNonNull(YamlWriter.class.getResource("/application.yml")).getFile();
+        ObjectMapper mapper = new ObjectMapper(new YAMLFactory()
+                .disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER)
+                // 关键配置：禁用字符串自动引号
+                .enable(YAMLGenerator.Feature.MINIMIZE_QUOTES)
+                .enable(YAMLGenerator.Feature.INDENT_ARRAYS));
+
+        GitRepositoryConfig appConfig = mapper.readValue(new File(filePath), GitRepositoryConfig.class);
+        Map<String, Object> map = mapper.readValue(new File(mainFilePath), Map.class);
+        List<String> gitProjects = appConfig.getProjects().stream()
+                .map(GitProject::getName)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (CollectionUtils.isEmpty(gitProjects)) {
+            return "/login";
+        }
+        boolean isLogin = gitRepositoryService.isLogin(username, password, gitProjects.get(0));
+        if (isLogin) {
+            if (!username.equals(gitRepositoryConfig.getGitUsername())
+                    || !password.equals(gitRepositoryConfig.getGitPassword())) {
+                gitRepositoryConfig.setGitUsername(username);
+                gitRepositoryConfig.setGitPassword(password);
+            }
+            map.put("git-username", username);
+            map.put("git-password", password);
+//            mapper.writeValue(new File(mainFilePath), map);
+            logger.info("用户{}登录成功", username);
+            return "/list";
+        }
+        return "/login";
     }
 
     /**
@@ -77,6 +168,7 @@ public class IndexController {
      */
     @RequestMapping("/list")
     public String list(Model model) {
+        logger.info("进入列表展示");
         List<GitProject> projects = gitRepositoryService.getAllGitProject();
         if(CollectionUtils.isEmpty(projects)){
             return "list";
@@ -96,15 +188,46 @@ public class IndexController {
         return "list";
     }
 
+    @RequestMapping("/describeDepotMergeReqList")
+    public String describeDepotMergeReqList(Model model) {
+        List<GitProject> projects = gitRepositoryService.getAllGitProject();
+        if(CollectionUtils.isEmpty(projects)){
+            return "list";
+        }
+        Map<String, List<CodingMergersInfo>> codingMergersInfoMap = new HashMap<>();
+        for(GitProject gitProject : projects){
+            try {
+                List<CodingMergersInfo> codingMergersInfos = gitRepositoryService.describeDepotMergeRequests(gitProject);
+                List<String> infos = codingMergersInfos.stream().map(CodingMergersInfo::showInfo).collect(Collectors.toList());
+                codingMergersInfoMap.put(gitProject.getName(), codingMergersInfos);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        //查询仓库合并请求列表
+        model.addAttribute("codingMergersInfoMap", codingMergersInfoMap);
+        return list(model);
+    }
+
     @PostMapping("/setGitAccount")
-    public String setGitAccount(Model model, String username, String password) {
+    public String setGitAccount(Model model, String username, String password, String token) {
         gitRepositoryConfig.setGitUsername(username);
         gitRepositoryConfig.setGitPassword(password);
+        if (StringUtils.hasLength(token)) {
+            gitRepositoryConfig.setToken(token);
+        }
         List<GitProject> projects = gitRepositoryService.getAllGitProject();
         modelBuild(model, projects);
         return "list";
     }
 
+    /**
+     * 增加仓库
+     * @param model
+     * @param gitProject
+     * @return
+     * @throws Exception
+     */
     @PostMapping("/setGitProject")
     public String setGitProject(Model model, String gitProject) throws Exception {
         List<String> projectUrls = Arrays.asList(gitProject.split(";"));
@@ -577,6 +700,31 @@ public class IndexController {
         model.addAttribute("gitRepositoryConfig", gitRepositoryConfig);
         model.addAllAttributes(Arrays.asList(objects));
     }
+
+    private void modelMergeBuild(Model model, List<GitProject> projects, boolean isShowMergerList, Object... objects) {
+        if (isShowMergerList) {
+            Map<String, List<CodingMergersInfo>> codingMergersInfoMap = new HashMap<>();
+            for(GitProject gitProject : projects){
+                try {
+                    List<CodingMergersInfo> codingMergersInfos = gitRepositoryService.describeDepotMergeRequests(gitProject);
+                    List<String> infos = codingMergersInfos.stream().map(CodingMergersInfo::showInfo).collect(Collectors.toList());
+                    codingMergersInfoMap.put(gitProject.getName(), codingMergersInfos);
+                } catch (IOException e) {
+                    logger.info("读取合并请求列表异常：" + e);
+                    throw new RuntimeException(e);
+                }
+            }
+            //查询仓库合并请求列表
+            model.addAttribute("codingMergersInfoMap", codingMergersInfoMap);
+        }
+        /**
+         * 添加项目集合属性
+         */
+        model.addAttribute("projects", projects);
+        model.addAttribute("gitRepositoryConfig", gitRepositoryConfig);
+        model.addAllAttributes(Arrays.asList(objects));
+    }
+
 
     /**
      * 构建最上层的pom文件

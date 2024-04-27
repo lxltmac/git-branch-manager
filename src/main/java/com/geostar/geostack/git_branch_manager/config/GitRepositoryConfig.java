@@ -4,6 +4,7 @@ import com.geostar.geostack.git_branch_manager.common.YamlWriter;
 import com.geostar.geostack.git_branch_manager.pojo.GitProject;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -22,6 +23,16 @@ public class GitRepositoryConfig {
     private String gitUsername;
 
     private String gitPassword;
+
+    private String token;
+
+    public String getToken() {
+        return token;
+    }
+
+    public void setToken(String token) {
+        this.token = token;
+    }
 
     public String getWorkHome() {
         return workHome;
@@ -83,5 +94,9 @@ public class GitRepositoryConfig {
 
     public void setGitPassword(String gitPassword) {
         this.gitPassword = gitPassword;
+    }
+
+    public String getCodingToken(String defaultToken){
+        return StringUtils.hasLength(token) ? "token ".concat(token) : "token ".concat(defaultToken);
     }
 }

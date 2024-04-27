@@ -1,13 +1,14 @@
 package com.geostar.geostack.git_branch_manager.service.impl;
 
+import com.alibaba.fastjson.JSON;
 import com.geostar.geostack.git_branch_manager.common.BranchTypeEnum;
 import com.geostar.geostack.git_branch_manager.common.JsonUtil;
 import com.geostar.geostack.git_branch_manager.common.OkHttpClientHelper;
 import com.geostar.geostack.git_branch_manager.common.Page;
 import com.geostar.geostack.git_branch_manager.config.GitRepositoryConfig;
-import com.geostar.geostack.git_branch_manager.pojo.CodingMergeReq;
-import com.geostar.geostack.git_branch_manager.pojo.GitLog;
-import com.geostar.geostack.git_branch_manager.pojo.GitProject;
+import com.geostar.geostack.git_branch_manager.pojo.*;
+import com.geostar.geostack.git_branch_manager.pojo.coding.CodingMergersInfo;
+import com.geostar.geostack.git_branch_manager.pojo.coding.DataObject;
 import com.geostar.geostack.git_branch_manager.service.IGitRepositoryService;
 import org.apache.commons.io.FileUtils;
 import org.eclipse.jgit.api.Git;
@@ -15,7 +16,9 @@ import org.eclipse.jgit.api.ListBranchCommand;
 import org.eclipse.jgit.api.MergeCommand;
 import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.api.errors.JGitInternalException;
 import org.eclipse.jgit.api.errors.NoHeadException;
+import org.eclipse.jgit.api.errors.TransportException;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
@@ -27,6 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -51,9 +55,17 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
      */
     private static final String LOG_SEPARATOR = "---------------------------当前项目处理完毕---------------------------";
 
+    /**
+     * 创建合并请求
+     */
     private static final String CREATE_GIT_MERGE_REQ = "https://baiguokeji.coding.net/open-api/?action=CreateGitMergeReq";
 
-    private static final String TOKEN = "token 9ba529b981446fe209e7b3202a4a3279a87af250";
+    /**
+     * 查询仓库合并请求列表
+     */
+    private static final String DESCRIBE_DEPOT_MERGE_REQ = "https://baiguokeji.coding.net/open-api/?action=DescribeDepotMergeRequests";
+
+    private static final String TOKEN = "9ba529b981446fe209e7b3202a4a3279a87af250";
 
      CredentialsProvider reloadAllowHosts(){
         return new UsernamePasswordCredentialsProvider(gitRepositoryConfig.getGitUsername(), gitRepositoryConfig.getGitPassword());
@@ -359,6 +371,20 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
         return content;
     }
 
+    @Override
+    public List<CodingMergersInfo> describeDepotMergeRequests(GitProject gitProject) throws IOException {
+        if(!StringUtils.hasLength(gitRepositoryConfig.getToken())){
+            logger.info("获取合并请求列表信息，coding令牌不存在，取默认配置的 token");
+        }
+        String result = clientHelper.sendPostRequest(DESCRIBE_DEPOT_MERGE_REQ, builderDepotMergeBody(gitProject),
+                gitRepositoryConfig.getCodingToken(TOKEN));
+        CodingInfoBody codingInfoBody = JSON.parseObject(result, CodingInfoBody.class);
+        DataObject data = codingInfoBody.getResponse().getData();
+        List<CodingMergersInfo> list = data.getList();
+//        logger.info("获取合并请求列表信息：{}", list);
+        return list;
+    }
+
     /**
      * 删除标签，先删除本地标签，再删除远程标签
      *
@@ -429,12 +455,48 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
     }
 
     @Override
+    public boolean isLogin(String userName, String password, String gitProjectName) {
+        try {
+//            Git.cloneRepository()
+//                    .setURI(repositoryUrl)
+//                    .setCredentialsProvider(new UsernamePasswordCredentialsProvider(userName, password))
+//                    .call();
+            String modulesHome = gitRepositoryConfig.getModulesHome();
+            File file = new File(modulesHome + File.separator + gitProjectName + File.separator + ".git");
+            Git git = Git.open(file);
+            git.fetch().setCredentialsProvider(new UsernamePasswordCredentialsProvider(userName, password))
+                    .call();
+            logger.info("git权限检验，userName:{}, password:{}", userName, password);
+            logger.info("git权限检验成功.");
+            return true;
+        } catch (JGitInternalException e) {
+            if(e.getMessage().contains("already exists and is not an empty directory")){
+                logger.info("git权限检验，userName:{}, password:{}", userName, password);
+                logger.info("git权限检验成功.");
+                return true;
+            }
+            logger.info("git权限检验失败. The provided credentials are invalid." + e);
+        } catch (TransportException e) {
+            // 如果捕获到 TransportException，说明认证失败
+            System.out.println("权限检验失败. The provided credentials are invalid.");
+        } catch (Exception e) {
+            // 其他异常
+            System.out.println("An error occurred: " + e.getMessage());
+        }
+        return false;
+    }
+
+    @Override
     public boolean mergeBranchReq(GitProject gitProject, String currWorkBranch, String sourceBranch, String message, String content) throws IOException {
         logger.info("创建合并请求开始：{}，工作分支：{}，被合并分支{}", gitProject.getRemoteUrl(), currWorkBranch, sourceBranch);
         String modulesHome = gitRepositoryConfig.getModulesHome();
         File file = new File(modulesHome + File.separator + gitProject.getName() + File.separator + ".git");
+        if(!StringUtils.hasLength(gitRepositoryConfig.getToken())){
+            logger.info("创建合并请求处理，coding令牌不存在，取默认配置的 token");
+        }
         String result = clientHelper.sendPostRequest(
-                CREATE_GIT_MERGE_REQ, builderBody(gitProject, currWorkBranch, sourceBranch, message, content), TOKEN);
+                CREATE_GIT_MERGE_REQ, builderBody(gitProject, currWorkBranch, sourceBranch, message, content),
+                gitRepositoryConfig.getCodingToken(TOKEN));
         logger.info("创建合并请求完成，合并结果：{}", result);
         logger.info("创建合并请求完成：{}，工作分支：{}，被合并分支{}", gitProject.getRemoteUrl(), currWorkBranch, sourceBranch);
         logger.info(LOG_SEPARATOR);
@@ -450,6 +512,14 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
 //        req.setReviewers("EgtknuPCSd,qSoWQyZJfS,uFKDabiekA,DvjWXJhTkS,csKLXfkfOY,afvENvZhgy,yhFlPeAPoA,CvRZkHlFPQ");
         req.setSrcBranch(currWorkBranch);
         req.setTitle(message);
+        return JsonUtil.getInstance().toJsonStr(req);
+    }
+
+    private String builderDepotMergeBody(GitProject gitProject){
+        CodingDescribeDepotMergeReq req = new CodingDescribeDepotMergeReq();
+//        req.setDepotId("");
+        req.setDepotPath(gitProject.getRemoteUrl().replace("https://e.coding.net", ""));
+        req.setStatus("OPEN");
         return JsonUtil.getInstance().toJsonStr(req);
     }
 
@@ -551,7 +621,7 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
             git.close();
         }
         List<String> branchList = gitProject.getBranchList();
-        List<String> newBranchList = new ArrayList<>();
+        List<String> newBranchList = Collections.synchronizedList(new ArrayList<>());
         if (branchList.contains("master")) {
             newBranchList.add("master");
             branchList.remove(branchList.indexOf("master"));
@@ -563,6 +633,7 @@ public class GitRepositoryServiceImpl implements IGitRepositoryService {
         for (String branch : branchList) {
             newBranchList.add(branch);
         }
+
         gitProject.getBranchList().clear();
         gitProject.getBranchList().addAll(newBranchList);
     }
