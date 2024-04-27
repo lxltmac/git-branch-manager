@@ -1,12 +1,19 @@
-# Git仓库代码批量管理程序
+# Git仓库代码批量管理程序结合 coding 使用
 
 ## 概述
 
 程序实现批量管理Git仓库的能力，配置一组Git仓库代码地址（http或https）的列表后能够实现同时操作一组Git仓库。目前已实现账号密码配置、代码拉取、分支创建、分支切换、分支删除、代码推送、标签创建、标签删除等一系列操作，对于模块比较多（我负责的一个项目超过50个模块）的工程项目能够快速操作分支及标签，有效减少重复操作，提高生产效率。
 
-## 程序界面
+## 程序登录界面
+![Screenshot-01](doc/images/Login.png)
 
-![Screenshot-01](doc/images/Screenshot-01.png)
+## 程序仓库列表界面
+
+![Screenshot-01](doc/images/HouseList.png)
+
+## 程序显示合并请求列表界面
+
+![Screenshot-01](doc/images/MergerReqList.png)
 
 ## 程序功能
 
@@ -23,7 +30,9 @@
 5. 【删除分支】：删除指定分支，不允许删除 **master** 分支和 **develop** 分支
 6. 【推送代码】：提交并推送当前分支代码到远程仓库
 7. 【创建标签】：创建并推送一个标签到远程仓库
-8. 【删除标签】：删除本地及远程仓库中的指定标签，不可回滚，谨慎操作
+8. 【创建合并请求】：可以创建并推送一个合并请求到 coding
+9. 【删除标签】：删除本地及远程仓库中的指定标签，不可回滚，谨慎操作
+10. 【显示合并请求列表】：显示 coding 页面中当前仓库的所有开启的合并请求列表
 
 ### 操作说明
 
@@ -47,7 +56,7 @@
 
 下载发行版jar包 `java -jar git-branch-manager-xxx.jar` 运行，建议直接打开jar包修改 **application.yml** 中的配置项保存后使用
 
-## 致谢
+## 声明
 
-感谢 [JetBrains](https://www.jetbrains.com/?from=git-branch-manager) 对开源项目的支持
+此项目是根据 [wangrui027 git-branch-manager](https://github.com/wangrui027/git-branch-manager) 改造的，主要融入了 coding 契合团队内容工具使用
 
