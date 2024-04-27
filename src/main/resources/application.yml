@@ -14,5 +14,5 @@ logging:
   file:
     path: ${work-home}\logs
 modules-home: ${work-home}\modules
-#git-username: 2449382248@qq.com
-#git-password: lxl19920918@
+#git-username: 
+#git-password: 
